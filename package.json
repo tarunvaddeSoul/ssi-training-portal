@@ -1,0 +1,14 @@
+{
+  "name": "ssi-project",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter=backend start:dev\" \"pnpm --filter=frontend start\""
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
