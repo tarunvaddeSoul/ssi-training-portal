@@ -322,6 +322,7 @@ export default function PortalPage() {
             <CardTitle>Connect Your Wallet</CardTitle>
           </CardHeader>
           <CardContent>
+          <div className="text-center">
             <p className="mb-4">
               To access the training modules, please connect your digital
               wallet.
@@ -333,6 +334,8 @@ export default function PortalPage() {
                 "Connect Wallet"
               )}
             </Button>
+          </div>
+
             {invitationUrl && (
               <div className="mt-4">
                 <p className="mb-2">
