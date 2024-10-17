@@ -9,6 +9,7 @@ import OnboardingPage from './pages/OnboardingPage';
 import PHCPage from './pages/PHCPage';
 import { Toaster } from './components/ui/toaster';
 import '../src/styles/global.css';
+import SkillsPage from './pages/SkillPage';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
               <Route path="/performance" element={<PerformancePage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route path="/phc" element={<PHCPage />} />
+              <Route path="/skills" element={<SkillsPage />} />
             </Routes>
           </main>
           <footer className="bg-gray-100 dark:bg-gray-800 py-4 text-center text-sm text-gray-600 dark:text-gray-400">

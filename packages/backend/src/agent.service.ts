@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import axios from 'axios';
 import { AgentDto } from './dtos/agent.dto';
@@ -28,7 +29,7 @@ import {
 import { createRestAgent } from './agentUtils/restAgent';
 import { connect } from 'ngrok';
 import { IndyVdrPoolConfig } from './interface/agent.interface';
-
+// strategy (terraform, kubernetes), expectations from client and what we offer, platform to deploy on (AWS, Azure. Changes to aws to azure should be minimal), how are we developing (functionality, )
 export class AgentWrapper {
   public agent: Agent | RestRootAgent | null = null;
 
@@ -115,8 +116,7 @@ export class AgentService {
       const agentLabel = `agent-${agentId}`;
       const walletId = `wallet-${agentId}`;
 
-      // const endpoint = await connect(inboundPort);
-      const endpoint = `https://aec3-2401-4900-30d9-6050-ccc5-3591-13b6-1de2.ngrok-free.app`;
+      const endpoint = await connect(inboundPort);
       // const endpoint = `${this.agentHost}${inboundPort}`;
 
       const agentConfig = this.createAgentConfig(
@@ -192,6 +192,18 @@ export class AgentService {
     }
   }
 
+  async getConnectionById(id: string) {
+    try {
+      const connectionRecord = await this.agent?.connections.getById(id);
+      if (!connectionRecord) {
+        throw new NotFoundException(`Connection record with ID: ${id} not found`);
+      }
+      return connectionRecord;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async getConnectionState(id: string) {
     try {
       const connectionRecord = await this.agent?.connections.findAllByQuery({
@@ -204,6 +216,7 @@ export class AgentService {
         data: {
           state: connectionRecord?.[0]?.state,
           connectionId: connectionRecord?.[0]?.id,
+          theirLabel: connectionRecord?.[0]?.theirLabel,
         },
       };
     } catch (error) {

@@ -22,7 +22,7 @@ import { toast } from "../components/ui/use-toast";
 import { modules } from "../lib/modules";
 
 export default function PortalPage() {
-  const [hasStudentCard, setHasStudentCard] = useState(false);
+  const [hasPHC, setHasPHC] = useState(false);
   const [connectionId, setConnectionId] = useState("");
   const [outOfBandId, setOutOfBandId] = useState("");
   const [completedModules, setCompletedModules] = useState<number[]>([]);
@@ -38,23 +38,17 @@ export default function PortalPage() {
 
   useEffect(() => {
     const storedConnectionId = localStorage.getItem("connectionId");
-    const storedStudentCardStatus = localStorage.getItem("hasStudentCard");
-
     if (storedConnectionId) {
       setConnectionId(storedConnectionId);
-      if (storedStudentCardStatus === "true") {
-        setHasStudentCard(true);
-      } else {
-        verifyStudentAccessCard(storedConnectionId);
-      }
     }
   }, []);
+
 
   const createInvitation = async () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://localhost:3000/agent/create-invitation"
+        `${process.env.BASE_URL}/agent/create-invitation`
       );
       setInvitationUrl(response.data.data.invitationUrl);
       setOutOfBandId(response.data.data.outOfBandId);
@@ -76,12 +70,11 @@ export default function PortalPage() {
     while (attempts < maxAttempts) {
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/connection-state/id/${outOfBandId}`
+          `${process.env.BASE_URL}/agent/connection-state/id/${outOfBandId}`
         );
         if (response.data.data.state === "completed") {
           setConnectionId(response.data.data.connectionId);
           localStorage.setItem("connectionId", response.data.data.connectionId);
-          verifyStudentAccessCard(response.data.data.connectionId);
           return;
         }
       } catch (error) {
@@ -97,18 +90,18 @@ export default function PortalPage() {
     });
   };
 
-  const verifyStudentAccessCard = async (connId: string) => {
+  const verifyPHC = async () => {
     setVerificationInProgress(true);
     try {
       const response = await axios.post(
-        `http://localhost:3000/agent/verify-student-access-card/connectionId/${connId}`
+        `${process.env.BASE_URL}/verification/verify-phc/connectionId/${connectionId}`
       );
       const proofId = response.data.data.proofRecord.id;
-      await checkStudentCardVerificationState(proofId);
+      await checkPHCVerificationState(proofId);
     } catch (error) {
       toast({
         title: "Verification Error",
-        description: "Failed to verify student access card. Please try again.",
+        description: "Failed to verify Personhood Credential. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -116,27 +109,27 @@ export default function PortalPage() {
     }
   };
 
-  const checkStudentCardVerificationState = async (proofId: string) => {
+
+  const checkPHCVerificationState = async (proofId: string) => {
     let attempts = 0;
     const maxAttempts = 30;
 
     while (attempts < maxAttempts) {
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/verification-state/id/${proofId}`
+          `${process.env.BASE_URL}/verification/verification-state/id/${proofId}`
         );
 
         const verificationState = response.data.data.state;
         if (verificationState === "done") {
           const verified = response.data.data.verified;
-          setHasStudentCard(verified);
-          localStorage.setItem("hasStudentCard", verified.toString());
+          setHasPHC(verified);
           return;
         } else if (verificationState === "abandoned") {
           toast({
             title: "Verification Error",
             description:
-              "Failed to verify student access card. Please try again.",
+              "Failed to verify Personhood Credential. Please try again.",
             variant: "destructive",
           });
           return;
@@ -156,6 +149,7 @@ export default function PortalPage() {
     });
   };
 
+
   const verifyModule = async (moduleId: number) => {
     if (moduleId <= 1) {
       return true; // Module 1 doesn't need verification
@@ -165,7 +159,7 @@ export default function PortalPage() {
     try {
       const moduleName = modules[moduleId - 1].title;
       const response = await axios.post(
-        `http://localhost:3000/agent/verify/${encodeURIComponent(moduleName)}`,
+        `${process.env.BASE_URL}/verification/verify/${encodeURIComponent(moduleName)}`,
         { connectionId }
       );
       const proofId = response.data.data.proofRecord.id;
@@ -201,7 +195,7 @@ export default function PortalPage() {
   };
 
   const openModule = async (moduleId: number) => {
-    if (!hasStudentCard) {
+    if (!hasPHC) {
       toast({
         title: "Access Denied",
         description: "Please verify your student access card first.",
@@ -233,7 +227,7 @@ export default function PortalPage() {
     while (attempts < maxAttempts) {
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/verification-state/id/${proofId}`
+          `${process.env.BASE_URL}/verification/verification-state/id/${proofId}`
         );
 
         const verificationState = response.data.data.state;
@@ -271,7 +265,7 @@ export default function PortalPage() {
 
     try {
       const response = await axios.post(
-        `http://localhost:3000/agent/issue/${moduleName}`,
+        `${process.env.BASE_URL}/issuance/issue/${moduleName}`,
         {
           name: userName,
           marks: (Math.floor(Math.random() * 21) + 80).toString(),
@@ -293,7 +287,7 @@ export default function PortalPage() {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/credential-state/id/${id}`
+          `${process.env.BASE_URL}/issuance/credential-state/id/${id}`
         );
         state = response.data.data.state;
         if (state === "done") {
@@ -347,30 +341,30 @@ export default function PortalPage() {
           </CardContent>
         </Card>
       )}
-      {connectionId && !hasStudentCard && (
+{connectionId && !hasPHC && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Verify Student Access Card</CardTitle>
+            <CardTitle>Verify Personhood Credential</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="mb-4">
-              Please verify your Student Access Card to access the training
+              Please verify your Personhood Credential to access the training
               modules.
             </p>
             <Button
-              onClick={() => verifyStudentAccessCard(connectionId)}
+              onClick={verifyPHC}
               disabled={verificationInProgress}
             >
               {verificationInProgress ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                "Verify Access Card"
+                "Verify PHC"
               )}
             </Button>
           </CardContent>
         </Card>
       )}
-      {hasStudentCard && (
+      {hasPHC && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {modules.map((module) => (
             <Card

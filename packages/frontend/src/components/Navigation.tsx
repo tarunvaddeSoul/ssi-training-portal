@@ -1,3 +1,4 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { MoonIcon, SunIcon, TrashIcon } from "lucide-react";
@@ -16,12 +17,39 @@ const NavLink = ({ to, children }: any) => (
   </Link>
 );
 
+const Logo = () => (
+  <svg
+    className="w-8 h-8 mr-2"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M12 2L2 7L12 12L22 7L12 2Z"
+      className="fill-blue-600 dark:fill-blue-400"
+    />
+    <path
+      d="M2 17L12 22L22 17"
+      className="stroke-teal-600 dark:stroke-teal-400"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M2 12L12 17L22 12"
+      className="stroke-blue-600 dark:stroke-blue-400"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export default function Navigation() {
   const { setTheme, theme } = useTheme();
 
   const clearLocalStorage = () => {
     localStorage.clear();
-    console.log("Local storage cleared");
     toast({
       title: "Localstorage cleared",
       description: "All local data has been removed.",
@@ -33,9 +61,10 @@ export default function Navigation() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link to="/">
+            <Link to="/" className="flex items-center">
+              <Logo />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-teal-600 text-transparent bg-clip-text hover:from-blue-500 hover:to-teal-500 transition-all duration-300">
-                SSI Portal
+              VerifiEd
               </span>
             </Link>
           </div>
@@ -43,17 +72,19 @@ export default function Navigation() {
           <div className="hidden md:flex items-center space-x-4">
             <NavLink to="/portal">Training Modules</NavLink>
             <NavLink to="/performance">Performance</NavLink>
-
-            <Button
-              variant="outline"
-              className="relative overflow-hidden group bg-gradient-to-r from-blue-500 to-teal-500 text-white border-none"
-            >
-              <span className="relative z-10 font-semibold">
-                Get your PHC Now!!
-              </span>
-              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600 to-teal-600 animate-gradient-x"></span>
-              <span className="absolute inset-0 w-full h-full transition-all duration-300 ease-out scale-0 rounded-md group-hover:scale-105 group-hover:bg-white group-hover:opacity-30"></span>
-            </Button>
+            <NavLink to="/skills">Skills</NavLink>
+            <Link to="/phc">
+              <Button
+                variant="outline"
+                className="relative overflow-hidden group bg-gradient-to-r from-blue-500 to-teal-500 text-white border-none"
+              >
+                <span className="relative z-10 font-semibold">
+                  Get your PHC Now!!
+                </span>
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600 to-teal-600 animate-gradient-x"></span>
+                <span className="absolute inset-0 w-full h-full transition-all duration-300 ease-out scale-0 rounded-md group-hover:scale-105 group-hover:bg-white group-hover:opacity-30"></span>
+              </Button>
+            </Link>
 
             <Button
               variant="ghost"

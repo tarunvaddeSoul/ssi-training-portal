@@ -2,24 +2,24 @@ import { Body, Controller, Get, Param, Post, Res, HttpException, HttpStatus, Use
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { IssuanceService } from "./issuance.service";
 import { IssueCourseCredentialDto } from "../dtos/IssueCourseCredential.dto";
-import { Response } from 'express'; // Import the Response type
-import { Logger } from '@nestjs/common'; // Logger for logging requests and errors
+import { Response } from 'express';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('Issuance')
 @Controller('issuance')
 export class IssuanceController {
-  private readonly logger = new Logger(IssuanceController.name); // Initialize logger
+  private readonly logger = new Logger(IssuanceController.name);
 
   constructor(private readonly issuanceService: IssuanceService) {}
 
-  @Post('issue-phc/name/:name')
+  @Post('issue-phc/name/:name/expiry/:expiry/verificationMethod/:verificationMethod/connectionId/:connectionId')
   @ApiOperation({ summary: 'Issue Personhood Credential' })
   @ApiResponse({ status: 201, description: 'Credential offer created successfully (OOB)' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
-  async issuePHC(@Param('name') name: string, @Res() res: Response) {
+  async issuePHC(@Param('name') name: string, @Param('expiry') expiry: string, @Param('verificationMethod') verificationMethod: string, @Param('connectionId') connectionId: string, @Res() res: Response) {
     this.logger.log(`Issuing Personhood Credential for name: ${name}`);
     try {
-      const result = await this.issuanceService.issuePHC(name);
+      const result = await this.issuanceService.issuePHC(name, expiry, verificationMethod, connectionId);
       return res.status(HttpStatus.CREATED).json(result); // Send a 201 response
     } catch (error: any) {
       this.logger.error(`Failed to issue Personhood Credential: ${error.message}`);
@@ -43,20 +43,20 @@ export class IssuanceController {
   }
 
   @Post('issue/:courseTag')
-  @UsePipes(new ValidationPipe({ transform: true })) // Use validation pipes for incoming DTO
+  @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOperation({ summary: 'Issue Course Credential' })
   @ApiResponse({ status: 201, description: 'Course Credential issued successfully' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
   async issueCourseCredential(
     @Param('courseTag') courseTag: string,
     @Body() issueCourseCredentialDto: IssueCourseCredentialDto,
-    @Res() res: Response // Accept the Response object
+    @Res() res: Response
   ) {
     const { name, marks, connectionId } = issueCourseCredentialDto;
     this.logger.log(`Issuing Course Credential for name: ${name}, courseTag: ${courseTag}, connectionId: ${connectionId}`);
     try {
       const result = await this.issuanceService.issueCourseCredential(name, marks, courseTag, connectionId);
-      return res.status(HttpStatus.CREATED).json(result); // Send a 201 response
+      return res.status(HttpStatus.CREATED).json(result);
     } catch (error: any) {
       this.logger.error(`Failed to issue Course Credential: ${error.message}`);
       throw new HttpException(error.message || 'Failed to issue Course Credential', HttpStatus.BAD_REQUEST);
@@ -71,7 +71,7 @@ export class IssuanceController {
     this.logger.log(`Fetching credential state for ID: ${id}`);
     try {
       const result = await this.issuanceService.getCredentialState(id);
-      return res.status(HttpStatus.OK).json(result); // Send a 200 response
+      return res.status(HttpStatus.OK).json(result);
     } catch (error: any) {
       this.logger.error(`Failed to fetch credential state: ${error.message}`);
       throw new HttpException(error.message || 'Credential state not found', HttpStatus.NOT_FOUND);
@@ -85,7 +85,7 @@ export class IssuanceController {
     this.logger.log('Fetching all credential definitions');
     try {
       const result = await this.issuanceService.getAllCredentialDefinitions();
-      return res.status(HttpStatus.OK).json(result); // Send a 200 response
+      return res.status(HttpStatus.OK).json(result);
     } catch (error: any) {
       this.logger.error(`Failed to fetch credential definitions: ${error.message}`);
       throw new HttpException(error.message || 'Failed to fetch credential definitions', HttpStatus.BAD_REQUEST);
@@ -100,7 +100,7 @@ export class IssuanceController {
     this.logger.log(`Fetching credential definition for tag: ${tag}`);
     try {
       const result = await this.issuanceService.getCredentialDefinitionByTag(tag);
-      return res.status(HttpStatus.OK).json(result); // Send a 200 response
+      return res.status(HttpStatus.OK).json(result);
     } catch (error: any) {
       this.logger.error(`Failed to fetch credential definition by tag: ${error.message}`);
       throw new HttpException(error.message || 'Credential definition not found', HttpStatus.NOT_FOUND);

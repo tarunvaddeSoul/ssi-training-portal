@@ -59,4 +59,9 @@ export class AgentController {
       throw new HttpException(message, HttpStatus.NOT_FOUND); // Throw a 404 error with the message
     }
   }
+
+  @Get('connection/id/:id')
+  async getConnectionById(@Param('id') id: string) {
+    return await this.agentService.getConnectionById(id);
+  }
 }

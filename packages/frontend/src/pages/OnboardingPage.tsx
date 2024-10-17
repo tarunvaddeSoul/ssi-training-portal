@@ -33,7 +33,7 @@ export default function OnboardingPage() {
     setError(null);
     try {
       const response = await axios.post(
-        "http://localhost:3000/agent/verify-phc"
+        `${process.env.BASE_URL}/verification/verify-phc`
       );
       setProofUrl(response.data.data.proofUrl);
       setProofId(response.data.data.proofRecord.id);
@@ -51,7 +51,7 @@ export default function OnboardingPage() {
       await new Promise((resolve) => setTimeout(resolve, 2000)); // Poll every 2 seconds
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/verification-state/id/${id}`
+          `${process.env.BASE_URL}/verification/verification-state/id/${id}`
         );
         state = response.data.data.state;
         if (state === "done") {
@@ -73,7 +73,7 @@ export default function OnboardingPage() {
     setError(null);
     try {
       const response = await axios.post(
-        `http://localhost:3000/agent/issue-student-access-card/name/${encodeURIComponent(
+        `${process.env.BASE_URL}/issuance/issue-student-access-card/name/${encodeURIComponent(
           name
         )}`
       );
@@ -93,7 +93,7 @@ export default function OnboardingPage() {
       await new Promise((resolve) => setTimeout(resolve, 2000)); // Poll every 2 seconds
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/credential-state/id/${id}`
+          `${process.env.BASE_URL}/issuance/credential-state/id/${id}`
         );
         state = response.data.data.state;
         if (state === "done") {

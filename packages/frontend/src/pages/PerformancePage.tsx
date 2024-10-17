@@ -18,13 +18,48 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  Cell,
 } from "recharts";
 import { modules } from "../lib/modules";
 
 interface ModuleMarks {
   module: string;
   marks: number;
+  color: string;
 }
+
+const colorSchemes = [
+  {
+    bg: "from-blue-400 to-blue-600",
+    text: "text-white",
+    icon: "text-blue-100",
+    barColor: "#3B82F6",
+  },
+  {
+    bg: "from-green-400 to-green-600",
+    text: "text-white",
+    icon: "text-green-100",
+    barColor: "#10B981",
+  },
+  {
+    bg: "from-purple-400 to-purple-600",
+    text: "text-white",
+    icon: "text-purple-100",
+    barColor: "#8B5CF6",
+  },
+  {
+    bg: "from-yellow-400 to-yellow-600",
+    text: "text-white",
+    icon: "text-yellow-100",
+    barColor: "#F59E0B",
+  },
+  {
+    bg: "from-pink-400 to-pink-600",
+    text: "text-white",
+    icon: "text-pink-100",
+    barColor: "#EC4899",
+  },
+];
 
 export default function PerformancePage() {
   const [loading, setLoading] = useState(false);
@@ -52,7 +87,7 @@ export default function PerformancePage() {
     setLoading(true);
     try {
       const response = await axios.post(
-        `http://localhost:3000/agent/check-performance/connectionId/${connectionId}`
+        `${process.env.BASE_URL}/verification/check-performance/connectionId/${connectionId}`
       );
       const proofRecordId = response.data.data.proofRecord.id;
       await checkVerificationState(proofRecordId);
@@ -73,7 +108,7 @@ export default function PerformancePage() {
       await new Promise((resolve) => setTimeout(resolve, 2000)); // Poll every 2 seconds
       try {
         const response = await axios.get(
-          `http://localhost:3000/agent/verification-state/id/${id}`
+          `${process.env.BASE_URL}/verification/verification-state/id/${id}`
         );
         state = response.data.data.state;
         if (state === "done") {
@@ -101,22 +136,21 @@ export default function PerformancePage() {
   const fetchMarks = async (id: string) => {
     try {
       const response = await axios.get(
-        `http://localhost:3000/agent/requested-data/id/${id}`
+        `${process.env.BASE_URL}/verification/requested-data/id/${id}`
       );
-      const requestedProof = response.data.data.requestedProof;
+      const requestedProof = response.data.data.requestedProof.revealed_attrs;
 
-      // Map module numbers to actual module titles
       const moduleMarks: ModuleMarks[] = Object.entries(requestedProof).map(
-        ([key, value]: [string, any]) => {
-          // Extract module number from "Requesting Marks of Module X"
+        ([key, value]: [string, any], index: number) => {
           const moduleNumber = parseInt(key.match(/\d+/)?.[0] || "0", 10);
-          // Get the module title from the modules array based on the extracted number
           const moduleTitle =
             modules[moduleNumber - 1]?.title || `Module ${moduleNumber}`;
+          const colorScheme = colorSchemes[index % colorSchemes.length];
 
           return {
             module: moduleTitle,
             marks: parseInt(value.raw, 10),
+            color: colorScheme.barColor,
           };
         }
       );
@@ -130,10 +164,10 @@ export default function PerformancePage() {
       });
     }
   };
-
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-3xl font-bold mb-6">Performance Dashboard</h1>
+
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Your Module Performance</CardTitle>
@@ -155,26 +189,68 @@ export default function PerformancePage() {
           ) : (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {marks.map((mark) => (
-                  <Card key={mark.module}>
-                    <CardHeader>
-                      <CardTitle>{mark.module}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-bold">{mark.marks}%</p>
-                    </CardContent>
-                  </Card>
-                ))}
+                {marks.map((mark, index) => {
+                  const colorScheme = colorSchemes[index % colorSchemes.length];
+                  return (
+                    <Card
+                      key={mark.module}
+                      className={`bg-gradient-to-br ${colorScheme.bg}`}
+                    >
+                      <CardHeader>
+                        <CardTitle className={colorScheme.text}>
+                          {mark.module}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className={`text-2xl font-bold ${colorScheme.text}`}>
+                          {mark.marks}%
+                        </p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
-              <div className="h-[400px]">
+
+              <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={marks}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="module" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="marks" fill="#8884d8" name="Marks" />
+                  <BarChart
+                    data={marks}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
+                    barCategoryGap="30%" // Reduce gap to make bars thinner
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
+                    <XAxis
+                      dataKey="module"
+                      tick={{
+                        fontSize: 14,
+                        fill: "#555", // Brighter axis text
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 14,
+                        fill: "#555", // Brighter Y-axis text
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={40}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        color: "#333",
+                        borderRadius: "8px",
+                        border: "1px solid #ccc",
+                      }}
+                      itemStyle={{ color: "#333" }}
+                    />
+                    <Bar dataKey="marks" radius={[10, 10, 0, 0]}>
+                      {marks.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>

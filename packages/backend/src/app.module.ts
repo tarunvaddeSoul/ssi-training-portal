@@ -6,10 +6,22 @@ import { IssuanceController } from './issuance/issuance.controller';
 import { VerificationController } from './verification/verification.controller';
 import { IssuanceService } from './issuance/issuance.service';
 import { VerificationService } from './verification/verification.service';
+import { PrismaService } from './prisma.service';
+import { PhcModule } from './phc/phc.module';
+import { PhcController } from './phc/phc.controller';
+import { AuthController } from './auth/auth.controller';
+import { AuthService } from './auth/auth.service';
 
 @Module({
-  imports: [ConfigModule.forRoot()],
-  controllers: [AgentController, IssuanceController, VerificationController],
-  providers: [AgentService, Logger, IssuanceService, VerificationService],
+  imports: [ConfigModule.forRoot(), PhcModule],
+  controllers: [AgentController, IssuanceController, VerificationController, PhcController, AuthController],
+  providers: [
+    AgentService,
+    Logger,
+    IssuanceService,
+    VerificationService,
+    PrismaService,
+    AuthService
+  ],
 })
 export class AppModule {}

@@ -1,13 +1,34 @@
-import { HttpStatus, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { AgentService } from "../agent.service";
-import { RestRootAgent, RestRootAgentWithTenants } from "@credo-ts/rest/build/utils/agent";
-import { Agent, AutoAcceptCredential, CreateOutOfBandInvitationConfig, OutOfBandRecord } from "@credo-ts/core";
-import { AnonCredsCredentialDefinitionRecord, parseIndyCredentialDefinitionId, getUnqualifiedCredentialDefinitionId } from "@credo-ts/anoncreds";
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { AgentService } from '../agent.service';
+import {
+  RestRootAgent,
+  RestRootAgentWithTenants,
+} from '@credo-ts/rest/build/utils/agent';
+import {
+  Agent,
+  AutoAcceptCredential,
+  AutoAcceptProof,
+  CreateOutOfBandInvitationConfig,
+  OutOfBandRecord,
+} from '@credo-ts/core';
+import {
+  AnonCredsCredentialDefinitionRecord,
+  parseIndyCredentialDefinitionId,
+  getUnqualifiedCredentialDefinitionId,
+} from '@credo-ts/anoncreds';
 import * as turl from 'turl';
 
 @Injectable()
 export class IssuanceService {
-  constructor(private readonly agentService: AgentService, private logger: Logger) {}
+  constructor(
+    private readonly agentService: AgentService,
+    private logger: Logger,
+  ) {}
 
   public async getAgent(): Promise<RestRootAgent | RestRootAgentWithTenants> {
     return await this.agentService.getAgent();
@@ -53,12 +74,17 @@ export class IssuanceService {
     }
   }
 
-  async issuePHC(name: string) {
+  async issuePHC(
+    name: string,
+    expiry: string,
+    verificationMethod: string,
+    connectionId: string,
+  ) {
     try {
       const agent = (await this.getAgent()) as Agent;
 
       const credentialDefinition = await this.getCredentialDefinitionByTag(
-        'PHC Credential',
+        'PHC Credential V2',
       );
       const indyCredDefId = parseIndyCredentialDefinitionId(
         credentialDefinition.credentialDefinitionId,
@@ -69,12 +95,11 @@ export class IssuanceService {
           indyCredDefId.schemaSeqNo,
           indyCredDefId.tag,
         );
-      const currentTimeInSeconds = Math.floor(Date.now() / 1000); // Current time in seconds
-      const expiryTimeInSeconds = currentTimeInSeconds + 60 * 60 * 60; // Adding 60 minutes (3600 seconds)
 
-      const issuePHCResponse = await agent?.credentials.createOffer({
+      const issuePHCResponse = await agent?.credentials.offerCredential({
         protocolVersion: 'v2' as never,
         autoAcceptCredential: AutoAcceptCredential.Always,
+        connectionId,
         credentialFormats: {
           anoncreds: {
             credentialDefinitionId: `${getCredentialDefinitionId}`,
@@ -87,46 +112,28 @@ export class IssuanceService {
               {
                 name: 'Issued By',
                 mimeType: 'text/plain',
-                value: 'SSI Portal',
+                value: 'VerifiEd',
               },
               {
                 name: 'Expiry',
                 mimeType: 'text/plain',
-                value: expiryTimeInSeconds.toString(), // Setting expiry to current time + 60 minutes
+                value: expiry,
+              },
+              {
+                name: 'Verification Method',
+                mimeType: 'text/plain',
+                value: verificationMethod,
               },
             ],
           },
         },
       });
 
-      const message = issuePHCResponse?.message;
-
-      const createInvitationPayload = {
-        autoAcceptConnection: true,
-        messages: [message],
-      } as CreateOutOfBandInvitationConfig;
-
-      const outOfBandRecord: OutOfBandRecord =
-        (await agent?.oob.createInvitation(
-          createInvitationPayload,
-        )) as OutOfBandRecord;
-      const invitationUrl = outOfBandRecord.outOfBandInvitation.toUrl({
-        domain: agent?.config.endpoints[0] as string,
-      });
-
-      const shortUrl = turl
-        .shorten(invitationUrl)
-        .then((res) => res)
-        .catch((err) => {
-          this.logger.error(err);
-        });
-
       return {
         statusCode: HttpStatus.CREATED,
-        message: 'Credential offer created successfully (OOB)',
+        message: 'Credential offer created successfully',
         data: {
-          credentialUrl: await shortUrl,
-          credentialRecord: issuePHCResponse?.credentialRecord,
+          credentialRecord: issuePHCResponse,
         },
       };
     } catch (error) {
@@ -240,8 +247,8 @@ export class IssuanceService {
         );
       const timestamp = Math.floor(Date.now() / 1000); // Current time in epoch
 
-      const courseCredentialResponse =
-        await agent?.credentials.offerCredential({
+      const courseCredentialResponse = await agent?.credentials.offerCredential(
+        {
           protocolVersion: 'v2' as never,
           autoAcceptCredential: AutoAcceptCredential.Always,
           connectionId,
@@ -250,7 +257,7 @@ export class IssuanceService {
               credentialDefinitionId: `${getCredentialDefinitionId}`,
               attributes: [
                 {
-                  name: 'Name',
+                  name: 'Student Name',
                   mimeType: 'text/plain',
                   value: name,
                 },
@@ -264,11 +271,17 @@ export class IssuanceService {
                   mimeType: 'text/plain',
                   value: timestamp.toString(),
                 },
+                {
+                  name: 'Course Name',
+                  mimeType: 'text/plain',
+                  value: courseTag,
+                },
               ],
             },
           },
-          comment: 'Issuing Course Credential',
-        });
+          comment: `Issuing ${courseTag} Credential`,
+        },
+      );
 
       return {
         statusCode: HttpStatus.CREATED,

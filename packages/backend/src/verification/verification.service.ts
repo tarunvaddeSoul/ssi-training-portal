@@ -2,7 +2,12 @@ import {
   RestRootAgent,
   RestRootAgentWithTenants,
 } from '@credo-ts/rest/build/utils/agent';
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { AgentService } from '../agent.service';
 import {
   Agent,
@@ -15,7 +20,7 @@ import {
   getUnqualifiedCredentialDefinitionId,
 } from '@credo-ts/anoncreds';
 import { IssuanceService } from '../issuance/issuance.service';
-import * as turl from 'turl';
+import axios from 'axios';
 
 @Injectable()
 export class VerificationService {
@@ -140,13 +145,13 @@ export class VerificationService {
     }
   }
 
-  async verifyPHC() {
+  async verifyPHC(connectionId: string) {
     try {
       const agent = (await this.getAgent()) as Agent;
 
       const credentialDefinition =
         await this.issuanceService.getCredentialDefinitionByTag(
-          'PHC Credential',
+          'PHC Credential V2',
         );
       const indyCredDefId = parseIndyCredentialDefinitionId(
         credentialDefinition.credentialDefinitionId,
@@ -158,11 +163,12 @@ export class VerificationService {
           indyCredDefId.tag,
         );
       const currentTimeInSeconds = Math.floor(Date.now() / 1000); // Current time in seconds
-      const verifyPHCResponse = await agent.proofs.createRequest({
+      const verifyPHCResponse = await agent.proofs.requestProof({
         autoAcceptProof: AutoAcceptProof.Always,
         comment: 'string',
         willConfirm: true,
         protocolVersion: 'v2',
+        connectionId,
         proofFormats: {
           anoncreds: {
             name: 'Validating PHC',
@@ -183,33 +189,11 @@ export class VerificationService {
         },
       });
 
-      const message = verifyPHCResponse?.message;
-
-      const createInvitationPayload = {
-        autoAcceptConnection: true,
-        messages: [message],
-      } as CreateOutOfBandInvitationConfig;
-
-      const outOfBandRecord: OutOfBandRecord =
-        (await agent.oob.createInvitation(
-          createInvitationPayload,
-        )) as OutOfBandRecord;
-      const invitationUrl = outOfBandRecord.outOfBandInvitation.toUrl({
-        domain: agent.config.endpoints[0] as string,
-      });
-
-      const shortUrl = turl
-        .shorten(invitationUrl)
-        .then((res) => res)
-        .catch((err) => {
-          this.logger.error(err);
-        });
       return {
         statusCode: HttpStatus.CREATED,
         message: 'Proof request initiated successfully (OOB)',
         data: {
-          proofUrl: await shortUrl,
-          proofRecord: verifyPHCResponse?.proofRecord,
+          proofRecord: verifyPHCResponse,
         },
       };
     } catch (error) {
@@ -246,8 +230,7 @@ export class VerificationService {
         statusCode: HttpStatus.OK,
         message: 'Requested data fetched successfully!',
         data: {
-          requestedProof:
-            data?.presentation?.anoncreds?.requested_proof?.revealed_attrs,
+          requestedProof: data?.presentation?.anoncreds?.requested_proof,
         },
       };
     } catch (error) {
@@ -274,7 +257,7 @@ export class VerificationService {
                 restrictions: [
                   {
                     cred_def_id:
-                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2264778:Introduction to SSI',
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286400:Introduction to SSI V2',
                   },
                 ],
               },
@@ -283,7 +266,7 @@ export class VerificationService {
                 restrictions: [
                   {
                     cred_def_id:
-                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2264791:Digital Identity Fundamentals',
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286411:Digital Identity Fundamentals V2',
                   },
                 ],
               },
@@ -292,7 +275,7 @@ export class VerificationService {
                 restrictions: [
                   {
                     cred_def_id:
-                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2264793:Blockchain and SSI',
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286422:Blockchain and SSI V2',
                   },
                 ],
               },
@@ -301,7 +284,7 @@ export class VerificationService {
                 restrictions: [
                   {
                     cred_def_id:
-                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2264795:Privacy and Security in SSI',
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286427:Privacy and Security in SSI V2',
                   },
                 ],
               },
@@ -310,7 +293,7 @@ export class VerificationService {
                 restrictions: [
                   {
                     cred_def_id:
-                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2264797:Implementing SSI Solutions',
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286438:Implementing SSI Solutions V2',
                   },
                 ],
               },
@@ -327,6 +310,107 @@ export class VerificationService {
       };
     } catch (error) {
       throw error;
+    }
+  }
+
+  async getSkills(connectionId: string) {
+    try {
+      const agent = (await this.getAgent()) as Agent;
+      const proofRecord = await agent.proofs.requestProof({
+        autoAcceptProof: AutoAcceptProof.Always,
+        comment: 'string',
+        willConfirm: true,
+        protocolVersion: 'v2',
+        proofFormats: {
+          anoncreds: {
+            name: 'Requesting Course Details',
+            version: '1.0',
+            requested_attributes: {
+              'Requesting Course Details of Module 1': {
+                names: ['Course Name', 'Timestamp'],
+                restrictions: [
+                  {
+                    cred_def_id:
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286400:Introduction to SSI V2',
+                  },
+                ],
+              },
+              'Requesting Course Details of Module 2': {
+                names: ['Course Name', 'Timestamp'],
+                restrictions: [
+                  {
+                    cred_def_id:
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286411:Digital Identity Fundamentals V2',
+                  },
+                ],
+              },
+              'Requesting Course Details of Module 3': {
+                names: ['Course Name', 'Timestamp'],
+                restrictions: [
+                  {
+                    cred_def_id:
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286422:Blockchain and SSI V2',
+                  },
+                ],
+              },
+              'Requesting Course Details of Module 4': {
+                names: ['Course Name', 'Timestamp'],
+                restrictions: [
+                  {
+                    cred_def_id:
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286427:Privacy and Security in SSI V2',
+                  },
+                ],
+              },
+              'Requesting Course Details of Module 5': {
+                names: ['Course Name', 'Timestamp'],
+                restrictions: [
+                  {
+                    cred_def_id:
+                      'JM9L6HL2QCexjbn9WB46h9:3:CL:2286438:Implementing SSI Solutions V2',
+                  },
+                ],
+              },
+            },
+          },
+        },
+        connectionId,
+      });
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Proof requested successfully!',
+        data: {
+          proofRecord,
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async bankVerification(ifsc: string, accountNumber: string) {
+    try {
+      const bankVerificationResponse = await axios.post(
+        'https://api.trential.app/verification/api/1.0/verifications/bank-account',
+        {
+          ifsc,
+          accountNumber,
+          pennyLess: true,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'x-api-key': `${process.env.TRENTIAL_API_KEY}`,
+          },
+        },
+      );
+      return bankVerificationResponse.data;
+    } catch (error: any) {
+      throw new BadRequestException(
+        'Error verifying bank account ',
+        error.response?.data?.message || error.message,
+      );
     }
   }
 }

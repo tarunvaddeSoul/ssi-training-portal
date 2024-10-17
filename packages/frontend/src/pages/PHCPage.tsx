@@ -1,193 +1,396 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "../components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../components/ui/dialog";
-import { Step, Stepper } from "../components/ui/stepper";
-import { Input } from "../components/ui/input";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+//   DialogDescription,
+// } from "../components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
-import axios from "axios";
+import { Loader2, CheckCircle2 } from "lucide-react";
+import { toast } from "../components/ui/use-toast";
+import { QRCodeSVG as QRCode } from "qrcode.react";
+
+const steps = [
+  { title: "Connect", description: "Connect with SSI Portal" },
+  { title: "Verify", description: "Verify existing PHC" },
+  { title: "Authenticate", description: "Authenticate yourself" },
+  { title: "Issue", description: "Issue new PHC" },
+  { title: "Complete", description: "PHC process completed" },
+];
 
 export default function PHCPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [verificationState, setVerificationState] = useState("");
-  const [verificationId, setVerificationId] = useState("");
-  const [qrCode, setQrCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [invitationUrl, setInvitationUrl] = useState("");
+  const [connectionId, setConnectionId] = useState("");
+  const [theirLabel, setTheirLabel] = useState("");
   const [name, setName] = useState("");
+  const [verificationMethod, setVerificationMethod] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [issuanceState, setIssuanceState] = useState("");
+  const [bankVerificationSuccess, setBankVerificationSuccess] = useState(false);
 
-  const verifyPHC = async () => {
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authResult = urlParams.get("authResult");
+    const error = urlParams.get("error");
+
+    if (authResult) {
+      handleAuthResult(authResult);
+    } else if (error) {
+      setErrorMessage(decodeURIComponent(error));
+      setCurrentStep(2);
+    }
+  }, []);
+
+  const handleAuthResult = (authResult: string) => {
     try {
-      const response = await axios.post(
-        "http://localhost:3000/agent/verify-phc"
-      );
-      const data = response.data;
-      if (data.statusCode === 201) {
-        setVerificationId(data.data.proofRecord.id);
-        setQrCode(data.data.proofUrl);
-        setCurrentStep(1);
+      const result = JSON.parse(decodeURIComponent(authResult));
+      if (result.success) {
+        setName(result.user.name || result.user.login);
+        setVerificationMethod("GITHUB");
+        setCurrentStep(3);
+        window.history.replaceState({}, document.title, "/phc");
       } else {
-        throw new Error("Failed to initiate verification");
+        setErrorMessage(result.error || "Failed to authenticate with GitHub");
+        setCurrentStep(2);
       }
     } catch (error) {
-      setErrorMessage("Failed to initiate verification. Please try again.");
+      console.error("Error parsing auth result:", error);
+      setErrorMessage("An error occurred during authentication");
+      setCurrentStep(2);
     }
   };
 
-  const checkVerificationState = async () => {
+  const createInvitation = async () => {
+    setLoading(true);
     try {
-      const response = await axios.get(
-        `http://localhost:3000/agent/verification-state/id/${verificationId}`
+      const response = await axios.post(
+        `${process.env.BASE_URL}/agent/create-invitation`
       );
-      const data = response.data;
-      if (data.statusCode === 200) {
-        setVerificationState(data.data.state);
-        if (data.data.state === "abandoned") {
-          setErrorMessage(data.data.errorMessage || "Verification abandoned");
-          setCurrentStep(2);
-        } else if (data.data.state === "done") {
-          setErrorMessage("Valid PHC already exists in your wallet");
-          //   setCurrentStep(3);
+      setInvitationUrl(response.data.data.invitationUrl);
+      checkConnectionState(response.data.data.outOfBandId);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create invitation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkConnectionState = async (outOfBandId: string) => {
+    let attempts = 0;
+    const maxAttempts = 30;
+    while (attempts < maxAttempts) {
+      try {
+        const response = await axios.get(
+          `${process.env.BASE_URL}/agent/connection-state/id/${outOfBandId}`
+        );
+        if (response.data.data.state === "completed") {
+          const connectionId = response.data.data.connectionId;
+          setConnectionId(connectionId);
+          localStorage.setItem("connectionId", connectionId);
+          setTheirLabel(response.data.data.theirLabel);
+          localStorage.setItem("theirLabel", response.data.data.theirLabel);
+          setCurrentStep(1);
+          return;
         }
+      } catch (error) {
+        console.error("Error checking connection state:", error);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      attempts++;
+    }
+    toast({
+      title: "Connection Failed",
+      description: "Failed to establish connection. Please try again.",
+      variant: "destructive",
+    });
+  };
+
+  const verifyExistingPHC = async () => {
+    try {
+      const response = await axios.post(
+        `${process.env.BASE_URL}/phc/check-and-issue/theirLabel/${theirLabel}`
+      );
+      if (response.data.data.shouldIssueNewPHC) {
+        setCurrentStep(2);
+      } else {
+        toast({
+          title: "PHC Verified",
+          description: "Valid PHC already exists in your wallet.",
+          variant: "default",
+        });
+        setCurrentStep(4);
       }
     } catch (error) {
-      setErrorMessage("Failed to check verification state. Please try again.");
+      toast({
+        title: "Error",
+        description: "Failed to verify existing PHC. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const authenticateUser = (method: string) => {
+    if (method === "GITHUB") {
+      window.location.href = `${process.env.BASE_URL}/auth/github/login`;
+    } else if (method === "BANK") {
+      setVerificationMethod("BANK");
+    }
+  };
+
+  const verifyBankDetails = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        `${process.env.BASE_URL}/verification/bank-verification/ifsc/${ifscCode}/accountNumber/${accountNumber}`
+      );
+      if (response.data.data.accountExists) {
+        setName(response.data.data.nameAtBank);
+        setBankVerificationSuccess(true);
+        setVerificationMethod("BANK");
+        setCurrentStep(3);
+      } else {
+        setErrorMessage(
+          "Bank account verification failed. Please check your details and try again."
+        );
+      }
+    } catch (error) {
+      setErrorMessage(
+        "An error occurred during bank verification. Please try again."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   const issuePHC = async () => {
     try {
+      const currentTimeInSeconds = Math.floor(Date.now() / 1000);
+      const expiryTimeInSeconds = (
+        currentTimeInSeconds +
+        60 * 60 * 60
+      ).toString();
       const encodedName = encodeURIComponent(name);
       const response = await axios.post(
-        `http://localhost:3000/agent/issue-phc/name/${encodedName}`
+        `${process.env.BASE_URL}/issuance/issue-phc/name/${encodedName}/expiry/${expiryTimeInSeconds}/verificationMethod/${verificationMethod}/connectionId/${connectionId}`
       );
-      const data = response.data;
-      if (data.statusCode === 201) {
-        setQrCode(data.data.credentialUrl);
-        setVerificationId(data.data.credentialRecord.id);
-        setCurrentStep(3);
-      } else {
-        throw new Error("Failed to issue PHC");
-      }
+      checkIssuanceState(response.data.data.credentialRecord.id);
     } catch (error) {
-      setErrorMessage("Failed to issue PHC. Please try again.");
+      toast({
+        title: "Error",
+        description: "Failed to issue PHC. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
-  const checkIssuanceState = async () => {
-    try {
-      const response = await axios.get(
-        `http://localhost:3000/agent/credential-state/id/${verificationId}`
-      );
-      const data = response.data;
-      if (data.statusCode === 200) {
-        setIssuanceState(data.data.state);
-        if (data.data.state === "abandoned") {
-          setErrorMessage(data.data.errorMessage || "Issuance abandoned");
-        } else if (data.data.state === "done") {
-          setErrorMessage("");
+  const checkIssuanceState = async (credentialRecordId: string) => {
+    let attempts = 0;
+    const maxAttempts = 30;
+    while (attempts < maxAttempts) {
+      try {
+        const response = await axios.get(
+          `${process.env.BASE_URL}/issuance/credential-state/id/${credentialRecordId}`
+        );
+        if (response.data.data.state === "done") {
+          await storePHCData();
           setCurrentStep(4);
+          return;
+        } else if (response.data.data.state === "abandoned") {
+          toast({
+            title: "Issuance Failed",
+            description:
+              response.data.data.errorMessage || "PHC issuance was abandoned.",
+            variant: "destructive",
+          });
+          return;
         }
+      } catch (error) {
+        console.error("Error checking issuance state:", error);
       }
-    } catch (error) {
-      setErrorMessage("Failed to check issuance state. Please try again.");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      attempts++;
     }
+    toast({
+      title: "Issuance Timeout",
+      description: "PHC issuance process timed out. Please try again.",
+      variant: "destructive",
+    });
   };
 
-  useEffect(() => {
-    let intervalId: string | number | NodeJS.Timeout | undefined;
-    if (currentStep === 1) {
-      intervalId = setInterval(checkVerificationState, 5000);
-    } else if (currentStep === 3) {
-      intervalId = setInterval(checkIssuanceState, 5000);
+  const storePHCData = async () => {
+    try {
+      const theirLabel = localStorage.getItem("theirLabel");
+      const expiry = Math.floor(Date.now() / 1000 + 60 * 60 * 60).toString();
+      await axios.post(`${process.env.BASE_URL}/phc`, { theirLabel, expiry });
+    } catch (error) {
+      console.error("Failed to store PHC data:", error);
     }
-    return () => clearInterval(intervalId);
-  }, [currentStep, verificationId]);
-
-  const steps: Step[] = [
-    { title: "Initiate", description: "Start PHC verification process" },
-    { title: "Verify", description: "Verify existing PHC" },
-    { title: "Issue", description: "Issue new PHC if needed" },
-    { title: "Scan", description: "Scan QR code with your wallet" },
-    { title: "Complete", description: "PHC process completed" },
-  ];
+  };
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Personhood Credential (PHC)</h1>
+    <div className="container mx-auto p-4 max-w-2xl">
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Get Your Personhood Credential</CardTitle>
+          <CardTitle className="text-2xl">
+            Personhood Credential (PHC)
+          </CardTitle>
+          <CardDescription>
+            A unique digital credential that verifies your identity as a real
+            person without revealing personal information.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center">
-            <p className="mb-4">
-              A Personhood Credential (PHC) is a unique digital credential that
-              verifies your identity as a real person without revealing personal
-              information.
-            </p>
-            <Button onClick={() => setIsModalOpen(true)}>
-              Get your PHC Now!!
-            </Button>
+          <div className="space-y-4">
+            {steps.map((step, index) => (
+              <div key={step.title} className="flex items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                    index < currentStep
+                      ? "bg-green-500 text-white"
+                      : index === currentStep
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  {index < currentStep ? <CheckCircle2 size={16} /> : index + 1}
+                </div>
+                <div>
+                  <p className="font-medium">{step.title}</p>
+                  <p className="text-sm text-gray-500">{step.description}</p>
+                </div>
+              </div>
+            ))}
           </div>
-        </CardContent>
-      </Card>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Get Your Personhood Credential</DialogTitle>
-          </DialogHeader>
-          <Stepper steps={steps} currentStep={currentStep} />
-          <div className="mt-4">
+          <div className="mt-6">
             {currentStep === 0 && (
-              <Button onClick={verifyPHC}>Start PHC Process</Button>
-            )}
-            {currentStep === 1 && (
-              <div>
-                <p>Scan this QR code with your wallet to verify your PHC:</p>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrCode}`}
-                  alt="Verification QR Code"
-                  className="mx-auto mt-4"
-                />
+              <div className="space-y-4">
+                <p>Connect your wallet to start the PHC process.</p>
+                <Button onClick={createInvitation} disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    "Connect Wallet"
+                  )}
+                </Button>
+                {invitationUrl && (
+                  <div className="mt-4">
+                    <p className="mb-2">
+                      Scan this QR code with your digital wallet:
+                    </p>
+                    <QRCode
+                      value={invitationUrl}
+                      size={200}
+                      className="mx-auto"
+                    />
+                  </div>
+                )}
               </div>
             )}
+
+            {currentStep === 1 && (
+              <div className="space-y-4">
+                <p>Verifying your existing PHC...</p>
+                <Button onClick={verifyExistingPHC}>Verify PHC</Button>
+              </div>
+            )}
+
             {currentStep === 2 && (
-              <div>
-                <Input
-                  type="text"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mb-4"
-                />
+              <Tabs defaultValue="github" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="github">GitHub</TabsTrigger>
+                  <TabsTrigger value="bank">Bank Verification</TabsTrigger>
+                </TabsList>
+                <TabsContent value="github">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>GitHub Authentication</CardTitle>
+                      <CardDescription>
+                        Authenticate using your GitHub account.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <Button
+                        onClick={() => authenticateUser("GITHUB")}
+                        className="w-full"
+                      >
+                        Authenticate with GitHub
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="bank">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Bank Verification</CardTitle>
+                      <CardDescription>
+                        Verify your identity using your Indian bank account
+                        details.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="ifsc">IFSC Code</Label>
+                        <Input
+                          id="ifsc"
+                          value={ifscCode}
+                          onChange={(e) => setIfscCode(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="account">Account Number</Label>
+                        <Input
+                          id="account"
+                          value={accountNumber}
+                          onChange={(e) => setAccountNumber(e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        onClick={verifyBankDetails}
+                        disabled={loading || !ifscCode || !accountNumber}
+                        className="w-full"
+                      >
+                        {loading ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          "Verify Bank Details"
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            )}
+
+            {currentStep === 3 && (
+              <div className="space-y-4">
+                <p>Authentication successful. Ready to issue your PHC.</p>
                 <Button onClick={issuePHC} disabled={!name}>
                   Issue New PHC
                 </Button>
               </div>
             )}
-            {currentStep === 3 && (
-              <div>
-                <p>Scan this QR code with your wallet to receive your PHC:</p>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrCode}`}
-                  alt="Issuance QR Code"
-                  className="mx-auto mt-4"
-                />
-              </div>
-            )}
+
             {currentStep === 4 && (
               <Alert>
                 <AlertTitle>Success!</AlertTitle>
@@ -196,15 +399,16 @@ export default function PHCPage() {
                 </AlertDescription>
               </Alert>
             )}
+
             {errorMessage && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="mt-4">
                 <AlertTitle>Error</AlertTitle>
                 <AlertDescription>{errorMessage}</AlertDescription>
               </Alert>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
     </div>
   );
 }
